@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # ==============================================================================
-# 全自动 VMess + WS + TLS 节点部署脚本 (权限修复最终版)
+# 全自动 VMess + WS + TLS 节点部署脚本 (终极修复版)
 #
-# 更新: 1. 修复Xray服务因证书权限不足无法启动的问题。
-#       2. 自动将证书移动到Xray可读目录并设置正确所有权。
+# 更新: 1. 强制执行Xray安装/更新，以确保xray用户和环境始终正确。
+#       2. 修复所有权和权限问题。
 #
 # 安全警告: 此脚本包含敏感信息，请勿泄露。
 # ==============================================================================
@@ -83,11 +83,9 @@ DOMAIN = sys.argv[3]
 TG_BOT_TOKEN = sys.argv[4]
 TG_CHAT_ID = sys.argv[5]
 
-# ** 关键修正: 定义临时路径和最终路径 **
-# acme.sh (以root运行) 先将证书生成到临时路径
+# 定义临时路径和最终路径
 TEMP_KEY_PATH = "/root/private.key"
 TEMP_FULLCHAIN_PATH = "/root/cert.crt"
-# Xray (以xray用户运行) 将从这个最终路径读取
 FINAL_KEY_PATH = "/usr/local/etc/xray/private.key"
 FINAL_FULLCHAIN_PATH = "/usr/local/etc/xray/cert.crt"
 
@@ -262,17 +260,15 @@ if __name__ == "__main__":
     main()
 EOF
 
-# --- 步骤 6: 安装并配置 Xray 服务端 ---
-if ! command -v xray &> /dev/null; then
-    echo "[*] Xray 未安装，正在为您自动安装..."
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install > /dev/null 2>&1
-    echo "[√] Xray 安装完成。"
-else
-    echo "[*] Xray 已安装，跳过安装步骤。"
-fi
+# --- 步骤 6: 安装并配置 Xray 服务端 (强制执行) ---
+# !! 本次修正: 移除if判断，强制执行安装脚本以修复缺失的用户等环境问题 !!
+echo "[*] 正在执行/更新 Xray 安装，以确保用户和环境正确..."
+bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install > /dev/null 2>&1
+echo "[√] Xray 安装/更新完成。"
 echo
 
-# --- 步骤 7: 移动证书并设置权限 (关键修复步骤) ---
+
+# --- 步骤 7: 移动证书并设置权限 ---
 echo "[*] 正在移动证书到 Xray 可访问的目录并设置权限..."
 if [ -f /root/cert.crt ] && [ -f /root/private.key ]; then
     mkdir -p /usr/local/etc/xray
