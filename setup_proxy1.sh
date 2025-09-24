@@ -1,10 +1,12 @@
 #!/bin/bash
 
 # ==============================================================================
-# 全自动 VMess + WS + TLS 节点部署脚本 (终极修复版)
+# 全自动 VMess + WS + TLS 节点部署脚本 (随机端口最终版)
 #
-# 更新: 1. 强制执行Xray安装/更新，以确保xray用户和环境始终正确。
-#       2. 修复所有权和权限问题。
+# 更新: 1. 自动生成 20000 以上的随机端口用于连接。
+#       2. 自动识别IP服务商和国家，并按 (服务商-国家) 格式智能命名节点。
+#       3. 自动安装所有依赖、acme.sh、Xray 并完成配置。
+#       4. 自动发送Telegram通知。
 #
 # 安全警告: 此脚本包含敏感信息，请勿泄露。
 # ==============================================================================
@@ -83,12 +85,9 @@ DOMAIN = sys.argv[3]
 TG_BOT_TOKEN = sys.argv[4]
 TG_CHAT_ID = sys.argv[5]
 
-# 定义临时路径和最终路径
-TEMP_KEY_PATH = "/root/private.key"
-TEMP_FULLCHAIN_PATH = "/root/cert.crt"
-FINAL_KEY_PATH = "/usr/local/etc/xray/private.key"
-FINAL_FULLCHAIN_PATH = "/usr/local/etc/xray/cert.crt"
-
+# 证书存放路径
+KEY_PATH = "/root/private.key"
+FULLCHAIN_PATH = "/root/cert.crt"
 
 def safe_print(message):
     print(message, flush=True)
@@ -163,7 +162,7 @@ def create_dns_record(zone_id, subdomain, ip):
 
 def install_certificate(full_domain):
     safe_print(f"[*] 正在为 {full_domain} 申请 SSL 证书 (这可能需要1-2分钟)...")
-    command = ["/root/.acme.sh/acme.sh", "--issue", "--server", "letsencrypt", "--dns", "dns_cf", "-d", full_domain, "--key-file", TEMP_KEY_PATH, "--fullchain-file", TEMP_FULLCHAIN_PATH, "--force"]
+    command = ["/root/.acme.sh/acme.sh", "--issue", "--server", "letsencrypt", "--dns", "dns_cf", "-d", full_domain, "--key-file", KEY_PATH, "--fullchain-file", FULLCHAIN_PATH, "--force"]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     for line in iter(process.stdout.readline, ''):
         sys.stdout.write(f"    {line}")
@@ -195,7 +194,7 @@ def write_xray_config(vmess_config):
     safe_print("[*] 正在生成并写入 Xray 服务端配置文件...")
     server_config = {
       "log": {"loglevel": "warning"},
-      "inbounds": [{"port": int(vmess_config['port']), "protocol": "vmess", "settings": {"clients": [{"id": vmess_config['id'], "alterId": 0}]}, "streamSettings": {"network": "ws", "security": "tls", "tlsSettings": {"certificates": [{"certificateFile": FINAL_FULLCHAIN_PATH, "keyFile": FINAL_KEY_PATH}]}, "wsSettings": {"path": vmess_config['path']}}}],
+      "inbounds": [{"port": int(vmess_config['port']), "protocol": "vmess", "settings": {"clients": [{"id": vmess_config['id'], "alterId": 0}]}, "streamSettings": {"network": "ws", "security": "tls", "tlsSettings": {"certificates": [{"certificateFile": FULLCHAIN_PATH, "keyFile": KEY_PATH}]}, "wsSettings": {"path": vmess_config['path']}}}],
       "outbounds": [{"protocol": "freedom"}]
     }
     try:
@@ -260,36 +259,23 @@ if __name__ == "__main__":
     main()
 EOF
 
-# --- 步骤 6: 安装并配置 Xray 服务端 (强制执行) ---
-# !! 本次修正: 移除if判断，强制执行安装脚本以修复缺失的用户等环境问题 !!
-echo "[*] 正在执行/更新 Xray 安装，以确保用户和环境正确..."
-bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install > /dev/null 2>&1
-echo "[√] Xray 安装/更新完成。"
-echo
-
-
-# --- 步骤 7: 移动证书并设置权限 ---
-echo "[*] 正在移动证书到 Xray 可访问的目录并设置权限..."
-if [ -f /root/cert.crt ] && [ -f /root/private.key ]; then
-    mkdir -p /usr/local/etc/xray
-    mv /root/cert.crt /usr/local/etc/xray/cert.crt
-    mv /root/private.key /usr/local/etc/xray/private.key
-    chown xray:xray /usr/local/etc/xray/cert.crt
-    chown xray:xray /usr/local/etc/xray/private.key
-    echo "[√] 证书移动和权限设置完成。"
+# --- 步骤 6: 安装并配置 Xray 服务端 ---
+if ! command -v xray &> /dev/null; then
+    echo "[*] Xray 未安装，正在为您自动安装..."
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install > /dev/null 2>&1
+    echo "[√] Xray 安装完成。"
 else
-    echo "[!] 未找到生成的证书文件，跳过移动步骤。Xray可能会启动失败。"
+    echo "[*] Xray 已安装，跳过安装步骤。"
 fi
 echo
 
-
-# --- 步骤 8: 重启 Xray 服务 ---
+# --- 步骤 7: 重启 Xray 服务 ---
 echo "[*] 正在重启 Xray 服务以应用新配置..."
 systemctl restart xray
 echo "[*] 等待2秒让服务启动..."
 sleep 2
 
-# --- 步骤 9: 检查最终状态 ---
+# --- 步骤 8: 检查最终状态 ---
 echo "[*] 检查 Xray 服务状态..."
 if systemctl is-active --quiet xray; then
     echo "[√] Xray 服务正在运行！"
