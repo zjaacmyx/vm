@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # ==============================================================================
-# 全自动 VMess + WS + TLS 节点部署脚本 (智能检测用户终极版)
+# 全自动 VMess + WS + TLS 节点部署脚本 (智能检测用户+组 终极版)
 #
-# 更新: 1. 自动检测Xray服务的运行用户(User)，解决chown失败的问题。
+# 更新: 1. 智能检测Xray服务的运行用户(User)和对应的用户组(Group)。
 #
 # 安全警告: 此脚本包含敏感信息，请勿泄露。
 # ==============================================================================
@@ -266,27 +266,35 @@ echo "[√] Xray 安装/更新完成。"
 echo
 
 
-# --- 步骤 7: 移动证书并设置权限 (智能检测用户版) ---
+# --- 步骤 7: 移动证书并设置权限 (智能检测用户和用户组) ---
 echo "[*] 正在移动证书到 Xray 可访问的目录并设置权限..."
 
-# !! 本次修正: 智能检测Xray服务的运行用户 !!
+# !! 本次修正: 智能检测Xray服务的运行用户和用户组 !!
 XRAY_USER=$(grep -oP '^User=\K.*' /etc/systemd/system/xray.service)
 
-# 如果检测失败，则回退到'nobody'，因为之前的日志中提到了它
 if [ -z "$XRAY_USER" ]; then
     echo "[!] 未能自动检测到Xray用户，将尝试使用 'nobody' 作为备用。"
     XRAY_USER="nobody"
 fi
 echo "[*] 检测到Xray服务运行用户为: $XRAY_USER"
 
+# 智能检测该用户的用户组
+XRAY_GROUP=$(id -gn "$XRAY_USER")
+if [ $? -ne 0 ] || [ -z "$XRAY_GROUP" ]; then
+    echo "[!] 未能自动检测到用户 '$XRAY_USER' 的用户组，将尝试使用 'nogroup' 作为备用。"
+    XRAY_GROUP="nogroup"
+fi
+echo "[*] 检测到对应的用户组为: $XRAY_GROUP"
+
+
 if [ -f /root/cert.crt ] && [ -f /root/private.key ]; then
     mkdir -p /usr/local/etc/xray
     mv /root/cert.crt /usr/local/etc/xray/cert.crt
     mv /root/private.key /usr/local/etc/xray/private.key
     
-    # 使用检测到的用户来设置所有权
-    chown "$XRAY_USER:$XRAY_USER" /usr/local/etc/xray/cert.crt
-    chown "$XRAY_USER:$XRAY_USER" /usr/local/etc/xray/private.key
+    # 使用检测到的用户和用户组来设置所有权
+    chown "$XRAY_USER:$XRAY_GROUP" /usr/local/etc/xray/cert.crt
+    chown "$XRAY_USER:$XRAY_GROUP" /usr/local/etc/xray/private.key
     
     echo "[√] 证书移动和权限设置完成。"
 else
