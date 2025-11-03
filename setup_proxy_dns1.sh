@@ -196,11 +196,12 @@ def write_xray_config(vmess_config):
     server_config = {
       "dns": {
         "servers": [
-          "https://dns.yuguan.xyz/dns-query",
-          "https://doh.360.cn/dns-query",
-          "https://cloudflare-dns.com/dns-query",
-          "https://dns.adguard-dns.com/dns-query",
-          "https://dns0.eu/dns-query"
+          "https://185.222.222.222/dns-query",
+          "https://doh.pub/dns-query",
+          "https://sky.rethinkdns.com/dns-query",
+          "https://dns1.dnscrypt.ca/dns-query",
+          "https://anycast.dns.nextdns.io/dns-query"
+          "https://dns.twnic.tw/dns-query"
         ]
       },
       "log": {"loglevel": "warning"},
