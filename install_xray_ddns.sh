@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# 一键部署 Xray + 智能 Cloudflare DDNS (含 systemd 定时自动更新)
+# 一键部署 Xray + 智能 Cloudflare DDNS (含定时更新)
 # ==============================================================================
 
 # -------------------[ 用户配置区 ]-------------------
@@ -41,6 +41,7 @@ else
 fi
 export CF_Key="$GLOBAL_KEY"
 export CF_Email="$CLOUDFLARE_EMAIL"
+/root/.acme.sh/acme.sh --set-default-ca --server letsencrypt >/dev/null
 
 # -------------------[ 安装 Xray ]-------------------
 echo "[3/11] 安装或更新 Xray..."
@@ -50,17 +51,17 @@ echo
 
 # -------------------[ Python 主逻辑 ]-------------------
 echo "[4/11] 执行主配置逻辑..."
-python3 - <<EOF
+python3 - <<'EOF'
 import requests, json, subprocess, time, uuid, random, string, os
 
-EMAIL = "$CLOUDFLARE_EMAIL"
-KEY = "$GLOBAL_KEY"
-DOMAIN = "$DOMAIN"
-ZONE = "$DDNS_ZONE_ID"
-TG_TOKEN = "$TG_BOT_TOKEN"
-TG_CHAT = "$TG_CHAT_ID"
-DOH = "$DOH_SERVER"
-RECORD_FILE = "$DDNS_RECORD_FILE"
+EMAIL = "zjaacg@gmail.com"
+KEY = "4a2cbf42292cb56d6b3e3828a0c4c03fe3a48"
+DOMAIN = "aack.eu.org"
+ZONE = "5bcd4f03195a971cebd370e70161ed7d"
+TG_TOKEN = "6373113358:AAEFSlUzIc_PBJLamGS4enmejWidYiHnlO8"
+TG_CHAT = "5270368345"
+DOH = "https://anycast.dns.nextdns.io/dns-query"
+RECORD_FILE = "/root/ddns_domain.txt"
 
 def safe_print(x): print(x, flush=True)
 
@@ -88,9 +89,11 @@ def ensure_subdomain():
     return sub
 
 def issue_cert(sub):
-    subprocess.run(["/root/.acme.sh/acme.sh","--issue","--dns","dns_cf","-d",sub,
-                    "--key-file","/root/private.key","--fullchain-file","/root/cert.crt","--force"],
-                    check=True)
+    subprocess.run([
+        "/root/.acme.sh/acme.sh","--issue","--dns","dns_cf","-d",sub,
+        "--key-file","/root/private.key","--fullchain-file","/root/cert.crt",
+        "--server","letsencrypt","--force"
+    ],check=True)
 
 def write_xray(sub,port,uuidv4):
     cfg={
@@ -237,7 +240,7 @@ python3 /root/cf_ddns.py | tee -a /root/cf_ddns.log
 
 # -------------------[ 状态展示 ]-------------------
 echo "[10/11] 查看定时任务状态:"
-systemctl list-timers | grep cf-ddns-check
+systemctl list-timers | grep cf-ddns-check || true
 echo
 
 echo "[11/11] ✅ 部署完成！"
