@@ -200,7 +200,7 @@ def write_xray_config(vmess_config):
           "https://doh.pub/dns-query",
           "https://sky.rethinkdns.com/dns-query",
           "https://dns1.dnscrypt.ca/dns-query",
-          "https://anycast.dns.nextdns.io/dns-query",
+          "https://anycast.dns.nextdns.io/dns-query"
           "https://dns.twnic.tw/dns-query"
         ]
       },
