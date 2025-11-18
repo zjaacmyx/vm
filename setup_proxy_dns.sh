@@ -1,15 +1,14 @@
 #!/bin/bash
 
 # ==============================================================================
-# 全自动 VMess + WS + TLS 节点部署脚本 (集成指定DNS最终版)
+# 全自动 VMess + WS + TLS 节点部署脚本 (集成指定DNS最终版 - 修复IP获取)
 #
-# 更新: 1. 在Xray配置中加入您指定的单一DNS-over-HTTPS服务器。
-#       2. 智能检测Xray服务的运行用户(User)和对应的用户组(Group)。
+# 更新日志: 
+# 1. 修复: 替换不稳定的 api.ipify.org，采用多源自动切换 (AWS/Cloudflare/IP.sb) 获取公网IP。
+# 2. 功能: 在Xray配置中加入指定的DNS-over-HTTPS服务器。
+# 3. 智能: 自动检测Xray服务的运行用户和组。
 #
-# 安全警告: 此脚本包含敏感信息，请勿泄露。
 # ==============================================================================
-
-# 添加DNS进去
 
 # 清屏
 clear
@@ -137,13 +136,33 @@ def get_zone_id():
         sys.exit(1)
 
 def get_public_ip():
-    try:
-        response = requests.get("https://api.ipify.org", timeout=5)
-        response.raise_for_status()
-        return response.text.strip()
-    except Exception as e:
-        safe_print(f"[x] 错误: 获取公网 IP 失败: {e}")
-        sys.exit(1)
+    """
+    使用多源获取公网IP，防止单点故障
+    """
+    # 优先列表：AWS -> Cloudflare -> IP.sb -> ifconfig.me -> Akamai
+    ip_services = [
+        "http://checkip.amazonaws.com",
+        "http://icanhazip.com",
+        "https://api.ip.sb/ip",
+        "http://ifconfig.me/ip",
+        "http://whatismyip.akamai.com"
+    ]
+    
+    for url in ip_services:
+        try:
+            # safe_print(f"[*] 尝试通过 {url} 获取IP...")
+            response = requests.get(url, timeout=5)
+            if response.status_code == 200:
+                ip = response.text.strip()
+                # 简单的合法性检查 (包含3个点)
+                if ip.count('.') == 3:
+                    safe_print(f"[√] 公网 IP 获取成功: {ip} (via {url})")
+                    return ip
+        except Exception:
+            continue
+
+    safe_print(f"[x] 错误: 所有 IP 获取服务均不可用，请检查服务器网络连接。")
+    sys.exit(1)
 
 def generate_subdomain(provider, country_code):
     random_chars = ''.join(random.choices(string.ascii_lowercase + string.digits, k=3))
@@ -261,7 +280,10 @@ def send_telegram_notification(token, chat_id, message):
 def main():
     provider, country_name_cn, country_code = get_ip_info()
     zone_id = get_zone_id()
+    
+    # 获取公网IP
     vps_ip = get_public_ip()
+    
     subdomain = generate_subdomain(provider, country_code)
     full_domain = create_dns_record(zone_id, subdomain, vps_ip)
     
