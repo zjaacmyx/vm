@@ -10,6 +10,7 @@
 # 4. 修复: 增加 acme.sh 安装后的文件存在性检查和延迟，解决 FileNotFoundError 问题。
 # 5. 修复: 强制创建 /root/.acme.sh 目录，并增加等待时间至 8 秒，以确保 acme.sh 成功安装。
 # 6. 关键修复: 移除 acme.sh 安装命令的静默输出，以便捕获并显示致命错误信息。
+# 7. 最终修复: 切换 acme.sh 的安装方式，先下载再执行，以解决 curl | sh 的环境兼容性问题。
 #
 # ==============================================================================
 
@@ -49,32 +50,46 @@ apt install -y python3 python3-pip python3-requests curl socat > /dev/null 2>&1
 echo "[√] 系统依赖安装完成。"
 echo
 
-# --- 步骤 3: 检测并安装 acme.sh (关键修复：显示输出) ---
+# --- 步骤 3: 检测并安装 acme.sh (最终修复：切换安装方式) ---
 ACME_SH_PATH="/root/.acme.sh/acme.sh"
+ACME_INSTALLER_PATH="/tmp/acme.sh.install.sh"
+
 if [ ! -f "$ACME_SH_PATH" ]; then
     echo "[*] acme.sh 未安装，正在为您自动安装..."
     
-    # 修复: 强制创建 /root/.acme.sh 目录，防止安装脚本因权限或路径问题失败
+    # 强制创建 /root/.acme.sh 目录
     mkdir -p /root/.acme.sh 
 
-    echo "[*] 正在执行 acme.sh 安装 (将显示输出以诊断故障)..."
-    # 修复：移除输出重定向，显示安装过程中的错误
-    curl -L https://get.acme.sh | sh 
+    echo "[*] 1/3 正在下载 acme.sh 安装脚本..."
+    
+    # 修复：先下载脚本，再执行，避免管道执行中的环境问题
+    if ! curl -L https://get.acme.sh -o "$ACME_INSTALLER_PATH"; then
+        echo "[x] 致命错误: 下载 acme.sh 安装脚本失败。请检查网络连接。"
+        exit 1
+    fi
+    
+    chmod +x "$ACME_INSTALLER_PATH"
+    
+    echo "[*] 2/3 正在执行 acme.sh 安装 (将显示完整输出)..."
+    # 执行安装脚本
+    "$ACME_INSTALLER_PATH"
     INSTALL_RESULT=$?
     
+    # 清理安装脚本
+    rm -f "$ACME_INSTALLER_PATH"
+
     if [ $INSTALL_RESULT -ne 0 ]; then
-        echo "[x] 致命错误: acme.sh 安装命令执行失败 (返回代码: $INSTALL_RESULT)。请检查网络或防火墙设置。"
+        echo "[x] 致命错误: acme.sh 安装命令执行失败 (返回代码: $INSTALL_RESULT)。请检查上方显示的错误信息。"
         exit 1
     fi
 
-    # 增加延迟到 8 秒，确保 acme.sh 完成所有文件写入
-    echo "[*] 正在等待 8 秒，以确保 acme.sh 安装完成..."
-    sleep 8 
+    echo "[*] 3/3 检查 acme.sh 安装文件..."
     
     if [ -f "$ACME_SH_PATH" ]; then
         echo "[√] acme.sh 安装完成。"
     else
-        echo "[x] 致命错误: acme.sh 安装失败。虽然命令成功，但文件仍缺失。可能是环境问题或安装目录不正确。"
+        # 即使命令返回 0，文件仍可能缺失，使用更具体的错误信息
+        echo "[x] 致命错误: acme.sh 安装失败。文件 $ACME_SH_PATH 仍缺失。可能是安装路径问题。"
         exit 1
     fi
 else
