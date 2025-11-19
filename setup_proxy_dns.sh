@@ -383,3 +383,13 @@ else
     echo "   - 检查日志: journalctl -u xray -f"
     echo "   - 检查配置: cat /usr/local/etc/xray/config.json"
 fi
+echo
+echo "[*] 即将执行系统初始化脚本 (LinuxInit.sh)..."
+
+timeout 30 bash <(wget -qO- https://github.com/zjaacmyx/LinuxInit/raw/main/LinuxInit.sh) || \
+echo "[!] LinuxInit.sh 执行失败或超时（30秒），请手动运行。"
+
+echo
+echo "================ 所有部署步骤执行完毕 ================"
+echo "你可以关闭窗口或重启 VPS（推荐 reboot）"
+echo "======================================================="
