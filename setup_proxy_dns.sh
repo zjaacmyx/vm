@@ -41,6 +41,7 @@ echo
 # --- 步骤 2: 安装系统依赖 ---
 echo "[*] 正在更新软件包列表并安装必要的系统依赖..."
 apt update -y > /dev/null 2>&1
+apt install -y curl socat wget screen sudo iptables iproute2 ufw unzip cron
 apt install -y python3 python3-pip curl socat > /dev/null 2>&1
 apt install -y python3 python3-requests python3-pip curl socat > /dev/null 2>&1
 echo "[√] 系统依赖安装完成。"
